@@ -89,7 +89,9 @@ On first start the server creates the schema and seeds starter productivity rule
 
 ### 3. Dashboard on Vercel
 1. Import the repository in Vercel and set **Root Directory** to `pg-edition/dashboard`. The framework (Vite) is detected from `vercel.json`.
-2. Add the environment variable **`VITE_API_URL=https://api.yourcompany.com`** (your API server, no trailing slash).
+2. Point the dashboard at your API server, in one of two ways:
+   - **Proxy (default):** [`dashboard/vercel.json`](dashboard/vercel.json) rewrites `/api/*` to the API server. Edit the destination host to match yours. No environment variable or CORS setup is needed.
+   - **Direct:** set the environment variable **`VITE_API_URL=https://api.yourcompany.com`** (no trailing slash), and add the dashboard URL to the server's `CORS_ORIGINS`.
 3. Deploy, open the site and create the first administrator account.
 4. Add the Vercel URL to the server's `CORS_ORIGINS`.
 
