@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+  <title>EmpMonitor Agent</title>
+  <style>
+    :root { --bg:#f5f7fb; --panel:#fff; --text:#111827; --muted:#6b7280; --border:#e4e8f0; --accent:#2563eb; --bad:#dc2626; --good:#16a34a; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --panel:#151b24; --text:#e6edf3; --muted:#8b98a9; --border:#273141; --accent:#5b8cff; color-scheme: dark; } }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { padding: 28px; }
+    .head { display:flex; gap:12px; align-items:center; margin-bottom: 6px; }
+    .logo { width:36px; height:36px; border-radius:9px; background:var(--accent); display:grid; place-items:center; }
+    h1 { font-size:18px; margin:0; }
+    p { color:var(--muted); margin: 4px 0 18px; }
+    label { display:block; font-weight:500; margin-bottom: 14px; }
+    input { display:block; width:100%; margin-top:6px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; font:inherit; background:var(--panel); color:var(--text); }
+    input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-color: var(--accent); }
+    #code { text-transform: uppercase; letter-spacing: .08em; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    button { width:100%; padding:10px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+    button:disabled { opacity:.6; }
+    .err { color: var(--bad); min-height: 20px; margin: 10px 0 0; font-size: 13px; }
+    .ok { color: var(--good); }
+    .foot { font-size:12px; color:var(--muted); margin-top: 16px; }
+    .hidden { display:none; }
+    .perm { background: var(--panel); border:1px solid var(--border); border-radius:8px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+    .perm button { width:auto; padding:5px 10px; margin-top:6px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="logo"><svg width="22" height="22" viewBox="0 0 32 32"><path d="M7 21l5-6 4 4 7-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h1>EmpMonitor Agent</h1>
+    </div>
+    <form id="form">
+      <p>Connect this computer to your organization. Ask your administrator for the server address and an enrollment code.</p>
+      <label>Server address <input id="server" type="url" placeholder="https://monitor.yourcompany.com" required /></label>
+      <label>Enrollment code <input id="code" placeholder="XXXXX-XXXXX" required autocomplete="off" /></label>
+      <button id="btn">Connect</button>
+      <div class="err" id="err"></div>
+    </form>
+    <div id="done" class="hidden">
+      <p class="ok" style="font-size:15px;font-weight:600;color:var(--good)">✓ Connected</p>
+      <p id="doneText"></p>
+      <div id="perms"></div>
+      <button id="closeBtn" style="margin-top:16px">Close</button>
+    </div>
+    <div class="foot" id="foot"></div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    window.agent.info().then((i) => {
+      if (i.serverUrl) $('server').value = i.serverUrl;
+      if (i.code) $('code').value = i.code;
+      $('foot').textContent = `Version ${i.version} · ${i.hostname}`;
+    });
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('btn').disabled = true; $('err').textContent = '';
+      const r = await window.agent.enroll($('server').value.trim(), $('code').value.trim());
+      $('btn').disabled = false;
+      if (!r.ok) { $('err').textContent = r.error; return; }
+      $('form').classList.add('hidden'); $('done').classList.remove('hidden');
+      $('doneText').textContent = `This computer is now monitored by ${r.orgName || 'your organization'}. The agent runs in the background and starts automatically when you log in.`;
+      if (r.platform === 'darwin') {
+        const items = [];
+        if (!r.permissions.screen) items.push(['Screen Recording', 'screen', 'needed for screenshots']);
+        if (!r.permissions.accessibility) items.push(['Accessibility', 'accessibility', 'needed for window titles and website names']);
+        $('perms').innerHTML = items.map(([n, k, why]) => `<div class="perm"><b>${n}</b> permission is ${why}.<br><button data-k="${k}">Open System Settings</button></div>`).join('');
+        document.querySelectorAll('#perms button').forEach((b) => b.addEventListener('click', () => window.agent.openPrivacySettings(b.dataset.k)));
+      }
+    });
+    $('closeBtn').addEventListener('click', () => window.agent.close());
+  </script>
+</body>
+</html>
