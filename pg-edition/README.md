@@ -69,6 +69,8 @@ docker run -d -p 8080:8080 -v empmonitor-data:/data \
 
 Without Docker: `cd server && npm ci && cp .env.example .env` (edit it) `&& npm start`.
 
+**Hostinger VPS with Traefik (n8n template):** use [`server/docker-compose.hostinger.yml`](server/docker-compose.hostinger.yml) in hPanel's Docker Manager. It needs no image build, gets HTTPS automatically through the existing Traefik, and picks up new commits on restart.
+
 All settings are documented in [`server/.env.example`](server/.env.example). The important ones:
 
 | Variable | Purpose |
