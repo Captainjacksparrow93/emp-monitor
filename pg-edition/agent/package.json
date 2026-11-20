@@ -5,6 +5,11 @@
   "description": "EmpMonitor desktop agent for Windows and macOS",
   "author": "EmpMonitor",
   "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Captainjacksparrow93/emp-monitor.git",
+    "directory": "pg-edition/agent"
+  },
   "private": true,
   "type": "module",
   "main": "src/main.js",
@@ -26,12 +31,28 @@
     "appId": "com.empmonitor.agent",
     "productName": "EmpMonitor Agent",
     "artifactName": "EmpMonitor-Agent-${version}-${os}-${arch}.${ext}",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["src/**/*", "assets/**/*", "package.json"],
-    "asarUnpack": ["node_modules/get-windows/**"],
-    "npmRebuild": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/get-windows/**"
+    ],
+    "npmRebuild": false,
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "artifactName": "EmpMonitor-Agent-Setup-${version}.${ext}"
     },
@@ -45,7 +66,20 @@
       "include": "build/installer.nsh"
     },
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["universal"] }, { "target": "zip", "arch": ["universal"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
       "category": "public.app-category.business",
       "icon": "build/icon.png",
       "hardenedRuntime": true,
@@ -56,8 +90,11 @@
         "LSUIElement": true,
         "NSScreenCaptureUsageDescription": "EmpMonitor captures periodic screenshots as configured by your organization.",
         "NSAppleEventsUsageDescription": "EmpMonitor reads the active browser tab's address to report which website is in use."
-      }
+      },
+      "x64ArchFiles": "Contents/Resources/app.asar.unpacked/node_modules/get-windows/**"
     },
-    "dmg": { "title": "EmpMonitor Agent" }
+    "dmg": {
+      "title": "EmpMonitor Agent"
+    }
   }
 }

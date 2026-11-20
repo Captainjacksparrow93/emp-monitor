@@ -15,6 +15,11 @@ on:
   workflow_dispatch:
   push:
     tags: ['agent-v*']
+  # Verify installer builds on PRs that touch the agent (artifacts are uploaded; nothing is published).
+  pull_request:
+    paths:
+      - 'pg-edition/agent/**'
+      - '.github/workflows/pg-edition-agent.yml'
 
 permissions:
   contents: write
