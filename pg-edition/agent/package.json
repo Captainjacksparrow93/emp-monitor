@@ -1,0 +1,63 @@
+{
+  "name": "empmonitor-agent",
+  "productName": "EmpMonitor Agent",
+  "version": "1.0.0",
+  "description": "EmpMonitor desktop agent for Windows and macOS",
+  "author": "EmpMonitor",
+  "license": "AGPL-3.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:mac": "electron-builder --mac --universal",
+    "dist": "electron-builder",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "get-windows": "9.2.3"
+  },
+  "devDependencies": {
+    "electron": "37.10.3",
+    "electron-builder": "26.0.20"
+  },
+  "build": {
+    "appId": "com.empmonitor.agent",
+    "productName": "EmpMonitor Agent",
+    "artifactName": "EmpMonitor-Agent-${version}-${os}-${arch}.${ext}",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["src/**/*", "assets/**/*", "package.json"],
+    "asarUnpack": ["node_modules/get-windows/**"],
+    "npmRebuild": true,
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "artifactName": "EmpMonitor-Agent-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": false,
+      "runAfterFinish": true,
+      "include": "build/installer.nsh"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["universal"] }, { "target": "zip", "arch": ["universal"] }],
+      "category": "public.app-category.business",
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "artifactName": "EmpMonitor-Agent-${version}-mac.${ext}",
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSScreenCaptureUsageDescription": "EmpMonitor captures periodic screenshots as configured by your organization.",
+        "NSAppleEventsUsageDescription": "EmpMonitor reads the active browser tab's address to report which website is in use."
+      }
+    },
+    "dmg": { "title": "EmpMonitor Agent" }
+  }
+}

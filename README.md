@@ -54,6 +54,9 @@
 
 
 
+> [!TIP]
+> **Postgres / Neon edition:** a self-contained deployable version is available in [`pg-edition/`](pg-edition). It includes a Windows & macOS desktop agent, an API server tuned for the Neon free tier, and a React dashboard you can host on Vercel. See [`pg-edition/README.md`](pg-edition/README.md).
+
 ## ➤ Introduction
 **[EmpMonitor](https://empmonitor.com/)** is an advanced **Open Source employee monitoring and productivity management software** designed to help businesses effectively *_track workforce activities, enhance efficiency, strengthen security, and improve overall workplace transparency_*. With the growing need for remote and hybrid work environments, organizations require a **_centralized, data-driven solution_** that ensures employees stay productive while maintaining a balanced and ethical approach to monitoring. EmpMonitor delivers a **complete powerful suite** of features that include **_time tracking, real-time screen monitoring, activity logging, and comprehensive analytics to provide deep insights into employee performance_**.With automated tracking and intelligent monitoring, EmpMonitor allows managers and business owners to evaluate work patterns, optimize workloads, and prevent operational inefficiencies. The software monitors active and idle time, website visits, application usage, keystrokes, and overall engagement levels, helping organizations identify productivity gaps and implement necessary improvements. Detailed reporting and intuitive dashboards ensure managers have a clear overview of employee performance, allowing them to make data-driven decisions to enhance workflow efficiency.
 

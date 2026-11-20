@@ -1,0 +1,138 @@
+import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { config, assertConfig } from './config.js';
+import { migrate } from './migrate.js';
+import { closePool, query } from './db.js';
+import { loadState, state, saveSetting } from './state.js';
+import { recoverSpool, startFlushTimer, stopFlushTimer, flush } from './buffer.js';
+import { runCleanup } from './maintenance.js';
+import { requireAdmin } from './auth.js';
+import { streamObject, verifySignedKey } from './storage.js';
+import { agentRouter } from './routes/agent.js';
+import { authRouter } from './routes/auth.js';
+import { devicesRouter, enrollRouter } from './routes/devices.js';
+import { peopleRouter } from './routes/people.js';
+import { analyticsRouter } from './routes/analytics.js';
+import { screenshotsRouter } from './routes/screenshots.js';
+import { settingsRouter } from './routes/settings.js';
+import { systemRouter } from './routes/system.js';
+
+assertConfig();
+
+const STARTER_RULES = [
+  ['app', 'Code', 1], ['app', 'Visual Studio', 1], ['app', 'IntelliJ', 1], ['app', 'Xcode', 1],
+  ['app', 'Terminal', 1], ['app', 'iTerm', 1], ['app', 'PowerShell', 1], ['app', 'Excel', 1],
+  ['app', 'Word', 1], ['app', 'PowerPoint', 1], ['app', 'Outlook', 1], ['app', 'Slack', 1],
+  ['app', 'Microsoft Teams', 1], ['app', 'Zoom', 1], ['app', 'Figma', 1], ['app', 'Notion', 1],
+  ['app', 'Spotify', -1], ['app', 'Steam', -1],
+  ['domain', 'github.com', 1], ['domain', 'gitlab.com', 1], ['domain', 'stackoverflow.com', 1],
+  ['domain', 'docs.google.com', 1], ['domain', 'mail.google.com', 1], ['domain', 'atlassian.net', 1],
+  ['domain', 'notion.so', 1], ['domain', 'figma.com', 1], ['domain', 'linkedin.com', 0],
+  ['domain', 'youtube.com', -1], ['domain', 'facebook.com', -1], ['domain', 'instagram.com', -1],
+  ['domain', 'netflix.com', -1], ['domain', 'reddit.com', -1], ['domain', 'x.com', -1], ['domain', 'twitter.com', -1],
+];
+
+async function seedOnce() {
+  if (state.settings.seeded) return;
+  const vals = [];
+  const params = [];
+  STARTER_RULES.forEach(([k, p, c], i) => {
+    params.push(k, p, c);
+    vals.push(`($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`);
+  });
+  await query(`INSERT INTO productivity_rules (kind, pattern, category) VALUES ${vals.join(',')} ON CONFLICT DO NOTHING`, params);
+  await saveSetting('seeded', true);
+  const { rows } = await query('SELECT id, kind, pattern, category FROM productivity_rules ORDER BY id');
+  state.rules = rows;
+}
+
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', true);
+
+// CORS: the dashboard is usually hosted on a different origin (e.g. Vercel).
+const allowed = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (allowed.includes('*') || allowed.includes(origin))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  return next();
+});
+
+// Health check never touches the DB (so uptime monitors don't keep Neon awake).
+app.get('/healthz', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
+
+app.use('/api/agent', agentRouter);
+
+// Signed image URLs (used by <img> tags in the dashboard).
+app.get(/^\/api\/files\/(.+)$/, (req, res, next) => {
+  const key = req.params[0];
+  if (!verifySignedKey(key, req.query.exp, req.query.sig)) return res.status(403).end();
+  return streamObject(key, res).catch(next);
+});
+
+app.use('/api', express.json({ limit: '1mb' }));
+app.use('/api/auth', authRouter);
+app.use('/api/devices', requireAdmin, devicesRouter);
+app.use('/api/enroll-tokens', requireAdmin, enrollRouter);
+app.use('/api/people', requireAdmin, peopleRouter);
+app.use('/api/analytics', requireAdmin, analyticsRouter);
+app.use('/api/screenshots', requireAdmin, screenshotsRouter);
+app.use('/api/settings', requireAdmin, settingsRouter);
+app.use('/api/system', requireAdmin, systemRouter);
+app.get('/api/live', requireAdmin, (req, res) => {
+  // memory-only snapshot for the overview page
+  res.json({ devices: state.devices.size, presence: [...state.presence.entries()].map(([id, p]) => ({ id, ...p })) });
+});
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Optional: serve the built dashboard from the same server (when not using Vercel).
+if (fs.existsSync(path.join(config.dashboardDir, 'index.html'))) {
+  app.use(express.static(config.dashboardDir, { index: false, maxAge: '1h' }));
+  app.get('*', (req, res) => res.sendFile(path.join(config.dashboardDir, 'index.html')));
+}
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.status || (err.type === 'entity.too.large' ? 413 : 500);
+  if (status >= 500) console.error('[error]', req.method, req.path, err);
+  res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
+});
+
+async function main() {
+  console.log('[boot] running migrations + loading state (one DB wake-up)');
+  await migrate();
+  await loadState();
+  await seedOnce();
+  recoverSpool();
+  startFlushTimer(() => runCleanup().catch((e) => console.error('[cleanup]', e.message)));
+  const server = app.listen(config.port, () => {
+    console.log(`[boot] EmpMonitor PG server listening on :${config.port} (flush every ${config.flushIntervalMin} min)`);
+  });
+
+  let stopping = false;
+  const shutdown = async (sig) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`[shutdown] ${sig}: flushing buffered data...`);
+    stopFlushTimer();
+    server.close();
+    try { await flush('shutdown'); } catch { /* data stays in spool and is recovered on next boot */ }
+    await closePool().catch(() => {});
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+main().catch((e) => {
+  console.error('[boot] failed:', e);
+  process.exit(1);
+});
