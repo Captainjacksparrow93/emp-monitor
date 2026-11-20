@@ -1,0 +1,74 @@
+# EmpMonitor API on a Hostinger VPS that already runs Traefik (the n8n template's "n8n_default" network).
+# hPanel → VPS → Docker Manager → Compose → paste this file, and put the variables below in the
+# project's Environment (.env):
+#
+#   DOMAIN=empmonitor-api.srvXXXXXXX.hstgr.cloud      # any *.srvXXXXXXX.hstgr.cloud name works (wildcard DNS)
+#   GIT_REF=main
+#   DATABASE_URL=postgresql://…-pooler…neon.tech/neondb?sslmode=require
+#   JWT_SECRET=<openssl rand -hex 32>                 # never change after machines are enrolled
+#   CORS_ORIGINS=https://your-dashboard.vercel.app    # comma-separated; * allows any origin
+#   FLUSH_INTERVAL_MIN=20
+#
+# No image build needed: the stock Node image downloads pg-edition/server from GitHub on start.
+# To deploy new commits, restart the project.
+services:
+  api:
+    container_name: empmonitor_api
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /srv
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        rm -rf /srv/app && mkdir -p /srv/app
+        wget -qO- https://codeload.github.com/Captainjacksparrow93/emp-monitor/tar.gz/refs/heads/$${GIT_REF} | tar xz -C /srv/app --strip-components=3 emp-monitor-$${GIT_REF}/pg-edition/server
+        cd /srv/app
+        if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund; else npm install --omit=dev --no-audit --no-fund; fi
+        exec node src/index.js
+    environment:
+      GIT_REF: ${GIT_REF:-main}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_URL: https://${DOMAIN}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      FLUSH_INTERVAL_MIN: ${FLUSH_INTERVAL_MIN:-20}
+      DATA_DIR: /data
+      PORT: '8080'
+      NODE_ENV: production
+      TZ: Asia/Kolkata
+    volumes:
+      - empmonitor_data:/data   # disk spool + screenshots (persistent)
+    networks:
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.empmonitor.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.empmonitor.entrypoints=websecure
+      - traefik.http.routers.empmonitor.tls.certresolver=mytlschallenge
+      - traefik.http.services.empmonitor.loadbalancer.server.port=8080
+      - traefik.docker.network=n8n_default
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/healthz']
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+volumes:
+  empmonitor_data:
+
+networks:
+  n8n_default:
+    external: true

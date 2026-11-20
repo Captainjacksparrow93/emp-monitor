@@ -3,3 +3,6 @@ dist/
 data/
 .env
 *.log
+
+# Lockfiles ARE committed here (the repo root ignores them): npm ci in CI, Docker and on the VPS needs them.
+!package-lock.json
