@@ -58,6 +58,9 @@ let current = null;
 let lastIdleSec = 0;
 let started = false;
 let activeWindowFn = null;
+let lastShot = { at: 0, status: 'none', count: 0 }; // why the last screenshot attempt did/didn't produce an image
+let screenAtStart = false;      // whether Screen Recording was granted when this process launched (macOS)
+let relaunchedForPerm = false;  // guard so we relaunch at most once when the permission flips
 const timers = {};
 
 const pendingFile = () => path.join(app.getPath('userData'), 'pending.json');
@@ -183,26 +186,49 @@ function scheduleUpload() {
   timers.persist = setInterval(savePending, 60 * 1000);
 }
 
+// On macOS, Screen Recording access is bound to the process at launch. If the user grants it while
+// the agent is already running, this process keeps getting empty frames even though the OS now
+// reports "granted" — so we relaunch once to pick it up (what macOS's "Quit & Reopen" would do).
+function maybeRelaunchForScreen() {
+  if (!isMac || !app.isPackaged || relaunchedForPerm || screenAtStart || !screenPermission()) return;
+  relaunchedForPerm = true;
+  log('Screen Recording granted after launch — relaunching to apply');
+  app.relaunch();
+  shutdownWork().finally(() => app.exit(0));
+}
+
 // ---------------------------------------------------------------- screenshots
 async function takeScreenshot({ force = false } = {}) {
   const s = policy.screenshots;
-  if (!force && !s.enabled) return;
-  if (monitoringState() !== 'active') return;
-  if (!force && s.skipWhenIdle && powerMonitor.getSystemIdleTime() >= policy.activity.idleThresholdSec) return;
-  if (current && isExcluded(current.app, policy.excludedApps)) return;
-  if (current?.app === 'Private') return;
+  const mark = (status, count = 0) => { lastShot = { at: Date.now(), status, count }; };
+  if (!force && !s.enabled) return mark('disabled');
+  if (monitoringState() !== 'active') return mark(monitoringState());
+  if (!force && s.skipWhenIdle && powerMonitor.getSystemIdleTime() >= policy.activity.idleThresholdSec) return mark('idle');
+  if ((current && isExcluded(current.app, policy.excludedApps)) || current?.app === 'Private') return mark('excluded');
   if (!screenPermission()) {
     log('screenshot skipped: no Screen Recording permission');
-    return;
+    return mark('no-permission');
   }
-  const shots = await withTimeout(captureScreens(s), 20000, []);
-  if (!shots.length) log('screenshot: capture returned nothing');
+  let shots = await withTimeout(captureScreens(s), 20000, []);
+  if (!shots.length) {
+    // macOS can return empty frames right after launch or a permission change; retry once.
+    await new Promise((r) => setTimeout(r, 800));
+    shots = await withTimeout(captureScreens(s), 20000, []);
+  }
+  if (!shots.length) {
+    log('screenshot: capture returned nothing');
+    mark('empty');
+    maybeRelaunchForScreen();
+    return undefined;
+  }
   const takenAt = Date.now();
   for (const [i, shot] of shots.entries()) {
     await enqueueScreenshot(shot.jpeg, {
       takenAt: takenAt + i, width: shot.width, height: shot.height, app: current?.app || '', domain: current?.domain || '',
     });
   }
+  mark('ok', shots.length);
+  return undefined;
 }
 
 function scheduleScreenshot() {
@@ -277,8 +303,10 @@ async function heartbeat() {
         idleSec: Math.round(powerMonitor.getSystemIdleTime()),
         current: st === 'active' ? current : null,
         permissions: isMac ? { screenRecording: screenPermission(), accessibility: accessibilityPermission() } : null,
+        shot: { status: lastShot.status, count: lastShot.count, at: lastShot.at },
       },
     });
+    maybeRelaunchForScreen(); // pick up a Screen Recording grant made while we were running
     if (res.policyVersion && res.policyVersion !== store.get('policyVersion')) await fetchConfig();
     for (const c of res.commands || []) await handleCommand(c).catch((e) => log('command failed', e.message));
     drain();
@@ -302,6 +330,7 @@ async function start() {
   employeeName = store.get('employeeName') || '';
   loadPending();
   lastSample = Date.now();
+  screenAtStart = screenPermission();
   applyPolicy();
   await heartbeat();
   drain();
