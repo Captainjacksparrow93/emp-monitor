@@ -12,6 +12,24 @@ import {
 } from '../components/ui.jsx';
 import { Lightbox } from './Screenshots.jsx';
 
+// Explains why screenshots are / aren't being captured, reported live by the agent.
+function ScreenshotStatus({ shot }) {
+  if (!shot || !shot.status || shot.status === 'none') return null;
+  const map = {
+    ok: ['good', `Capturing (${shot.count} screen${shot.count === 1 ? '' : 's'} last time)`],
+    disabled: ['', 'Screenshots are turned off in the policy'],
+    idle: ['', 'Paused while the user is idle (turn off “Skip while idle” to always capture)'],
+    excluded: ['', 'Current app is excluded / private'],
+    paused: ['warn', 'Monitoring is paused'],
+    locked: ['', 'Screen is locked'],
+    offhours: ['', 'Outside working hours'],
+    'no-permission': ['bad', 'No Screen Recording permission — grant it in System Settings → Privacy & Security, then the agent restarts itself'],
+    empty: ['bad', 'Screen Recording permission looks granted but macOS returns blank frames — the agent is relaunching to apply it. If it persists, open System Settings → Privacy & Security → Screen Recording, toggle EmpMonitor Agent off and on, and choose “Quit & Reopen”.'],
+  };
+  const [cls, text] = map[shot.status] || ['', `Screenshots: ${shot.status}`];
+  return <div className={`note ${cls === 'bad' ? 'warn' : ''} mt small`}><b>Screenshots:</b> {text}</div>;
+}
+
 export default function MachineDetail() {
   const { id } = useParams();
   const dev = useApi(`/devices/${id}`);
@@ -72,6 +90,7 @@ function ActivityTab({ device: d }) {
               Grant it in System Settings → Privacy &amp; Security on that Mac.
             </div>
           )}
+          <ScreenshotStatus shot={d.lastShot} />
         </div>
         <div className="card">
           <h3>Machine</h3>

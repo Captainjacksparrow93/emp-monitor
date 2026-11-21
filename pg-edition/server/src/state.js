@@ -170,6 +170,7 @@ export function deviceView(d) {
     paused: !!p?.paused,
     idleSec: p?.idleSec ?? null,
     current: p?.current || null,
+    lastShot: p?.shot || null,
     monitoring: p?.monitoring ?? null,
     permissions: p?.permissions || null,
     pendingCommands: (state.commands.get(d.id) || []).length,

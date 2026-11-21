@@ -61,6 +61,7 @@ agentRouter.post('/heartbeat', requireDevice, express.json({ limit: '16kb' }), (
     monitoring: b.monitoring !== false,
     idleSec: Number(b.idleSec) || 0,
     permissions: b.permissions && typeof b.permissions === 'object' ? b.permissions : null,
+    shot: b.shot && typeof b.shot === 'object' ? { status: s(b.shot.status, 24), count: Number(b.shot.count) || 0, at: Number(b.shot.at) || 0 } : null,
     current: b.current ? {
       app: s(b.current.app, 120),
       domain: s(b.current.domain, 120),
