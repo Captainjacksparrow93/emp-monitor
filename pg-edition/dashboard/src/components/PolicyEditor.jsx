@@ -46,6 +46,8 @@ export default function PolicyEditor({ value, onChange, disabled }) {
             checked={p.enabled} disabled={disabled} onChange={(v) => set('enabled', v)} />
           <Check label="Stealth mode" help="Hide the agent completely: no tray / menu-bar icon, no notice, no windows. Check your local laws — most require you to disclose monitoring to employees even when the software is hidden."
             checked={p.stealth} disabled={disabled} onChange={(v) => set('stealth', v)} />
+          <Check label="Auto-restart (tamper resistance)" help="Relaunch the agent if it is ended from Task Manager / Activity Monitor (Windows: within ~1 min, macOS: within seconds). An administrator can still uninstall it."
+            checked={p.autoRestart} disabled={disabled} onChange={(v) => set('autoRestart', v)} />
           <Check label="Show monitoring notice" help="Employees see a one-time notice and a tray icon so they know this computer is monitored. Ignored in stealth mode."
             checked={p.showNotice && !p.stealth} disabled={disabled || p.stealth} onChange={(v) => set('showNotice', v)} />
           <Check label="Employees can pause" help="Lets the user pause tracking from the tray menu (e.g. for personal time). Ignored in stealth mode (no tray)."

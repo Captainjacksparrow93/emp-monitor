@@ -55,3 +55,20 @@ test('app name + exclusions + jitter', () => {
   assert.equal(nextShotDelay(10, true, () => 0), 300000);
   assert.equal(nextShotDelay(10, true, () => 0.999999), 899999);
 });
+
+// ---- persistence builders (pure, no Electron) ----
+test('persistence task/plist builders', async () => {
+  const { buildWindowsTaskXml, buildMacPlist } = await import('../src/persistence.js');
+  const win = buildWindowsTaskXml('C:\\Program Files\\EmpMonitor Agent\\EmpMonitor Agent.exe');
+  assert.match(win, /<LogonTrigger>/);
+  assert.match(win, /<Interval>PT1M<\/Interval>/);
+  assert.match(win, /IgnoreNew/);
+  assert.match(win, /EmpMonitor Agent\.exe/);
+  assert.match(win, /S-1-5-32-545/); // runs for the interactive Users group
+  const plist = buildMacPlist('/Applications/EmpMonitor Agent.app/Contents/MacOS/EmpMonitor Agent');
+  assert.match(plist, /<key>KeepAlive<\/key>\s*<true\/>/);
+  assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/);
+  assert.match(plist, /com\.empmonitor\.agent/);
+  // XML-escapes special characters in the path
+  assert.match(buildMacPlist('/tmp/a&b'), /a&amp;b/);
+});
