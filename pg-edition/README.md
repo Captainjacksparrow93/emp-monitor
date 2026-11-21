@@ -112,6 +112,12 @@ Then, in the dashboard, go to **Machines → Add machine**: create a code, insta
 
 > **Important:** hiding the agent does not remove your legal duty to disclose. Covert monitoring is restricted or unlawful in many places even for company-owned devices (for example under GDPR in the EU/UK, and various US state laws). Make sure you have a lawful basis and a written monitoring policy or employee consent before using stealth mode.
 
+**Auto-restart (tamper resistance):** on by default (**Monitoring policy → Auto-restart**). The agent relaunches itself if an employee ends it from **Task Manager** (Windows) or **Activity Monitor** (macOS):
+- **Windows:** a hidden Scheduled Task named `EmpMonitor Agent` starts the agent at logon and re-checks every minute, so a killed agent is back within ~1 minute.
+- **macOS:** a per-user LaunchAgent (`~/Library/LaunchAgents/com.empmonitor.agent.plist`) with `KeepAlive`, so launchd relaunches it within ~1 second.
+
+Both run in the logged-in user's session (needed for screenshots). What this does **not** do: it does not hide the process from the task list, and it does **not** stop an **administrator** — anyone with admin rights can uninstall the agent (the uninstaller removes the task), or delete the task / LaunchAgent. Against a **standard user** the auto-restart defeats ending the process from the task manager, but a knowledgeable standard user could still disable the per-user task / LaunchAgent they own. For protection against that, deploy the Scheduled Task (Windows) or a `/Library/LaunchAgents` LaunchAgent (macOS) at **system scope through your MDM or an elevated installer**, where a standard user cannot remove it. Turn the whole feature off with the policy toggle.
+
 **macOS permissions:** the agent needs *Screen Recording* (for screenshots) and *Accessibility* (for window titles and browser URLs). It prompts for both after enrollment — those prompts are shown by macOS itself, so for a truly silent install you must pre-grant them with an MDM PPPC profile for bundle ID `com.empmonitor.agent` (in stealth mode nothing prompts the user to grant them). The dashboard flags Macs that are missing a permission.
 
 **Code signing:** unsigned builds work, but Windows SmartScreen and macOS Gatekeeper show warnings (on macOS: right-click → Open the first time). For production, add the signing secrets listed at the top of the workflow file.

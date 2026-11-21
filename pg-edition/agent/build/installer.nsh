@@ -8,3 +8,10 @@
     CopyFiles /SILENT "$EXEDIR\enroll.json" "$0\EmpMonitorAgent\enroll.json"
   skip_enroll:
 !macroend
+
+; On uninstall, stop the agent and remove its keep-alive scheduled task so it cannot relaunch.
+!macro customUnInstall
+  nsExec::Exec 'schtasks /End /TN "EmpMonitor Agent"'
+  nsExec::Exec 'schtasks /Delete /TN "EmpMonitor Agent" /F'
+  nsExec::Exec 'taskkill /F /IM "EmpMonitor Agent.exe" /T'
+!macroend

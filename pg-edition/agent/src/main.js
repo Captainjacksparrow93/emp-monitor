@@ -23,6 +23,7 @@ import {
   enqueueBatch, enqueueScreenshot, drain, setRevokedHandler, queueStatus, clearQueue,
 } from './queue.js';
 import { captureScreens, screenPermission, accessibilityPermission } from './capture.js';
+import { ensurePersistence, removePersistence } from './persistence.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const asset = (f) => path.join(__dirname, '..', 'assets', f);
@@ -39,6 +40,7 @@ const DEFAULT_POLICY = {
   maxPauseMin: 30,
   showNotice: true,
   stealth: false, // when true: no tray icon, no notice, no windows or dialogs — runs silently
+  autoRestart: true, // relaunch the agent if it is killed from Task Manager / Activity Monitor
   excludedApps: [],
 };
 
@@ -229,6 +231,8 @@ function applyPolicy() {
   scheduleHeartbeat();
   syncTray();
   maybeShowNotice();
+  // Keep-alive only once the machine is enrolled; harmless to call repeatedly (acts only on change).
+  if (store.isEnrolled()) ensurePersistence(!!policy.autoRestart).catch(() => {});
 }
 
 /** Create, refresh or remove the tray icon to match stealth mode. */
@@ -317,6 +321,7 @@ async function revoke(message) {
   await clearQueue().catch(() => {});
   try { fs.rmSync(pendingFile(), { force: true }); } catch { /* ignore */ }
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: false });
+  await removePersistence(); // stop the keep-alive, otherwise the agent would relaunch itself
   if (!isStealth()) await dialog.showMessageBox({ type: 'info', title: 'EmpMonitor Agent', message }).catch(() => {});
   app.exit(0);
 }

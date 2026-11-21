@@ -35,6 +35,7 @@ export const DEFAULT_POLICY = {
   maxPauseMin: 30,
   showNotice: true,       // show a one-time "this computer is monitored" notice
   stealth: false,         // silent mode: no tray icon, no notice, no windows on the employee's computer
+  autoRestart: true,      // relaunch the agent if an employee kills it from Task Manager / Activity Monitor
   excludedApps: [],       // apps that are never tracked or screenshotted (e.g. password managers)
 };
 
