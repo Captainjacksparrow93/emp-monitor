@@ -44,12 +44,14 @@ export default function PolicyEditor({ value, onChange, disabled }) {
         <div className="form-grid">
           <Check label="Monitoring enabled" help="Master switch. When off, agents stay connected but collect nothing."
             checked={p.enabled} disabled={disabled} onChange={(v) => set('enabled', v)} />
-          <Check label="Show monitoring notice" help="Employees see a one-time notice and a tray icon so they know this computer is monitored."
-            checked={p.showNotice} disabled={disabled} onChange={(v) => set('showNotice', v)} />
-          <Check label="Employees can pause" help="Lets the user pause tracking from the tray menu (e.g. for personal time)."
-            checked={p.allowPause} disabled={disabled} onChange={(v) => set('allowPause', v)} />
+          <Check label="Stealth mode" help="Hide the agent completely: no tray / menu-bar icon, no notice, no windows. Check your local laws — most require you to disclose monitoring to employees even when the software is hidden."
+            checked={p.stealth} disabled={disabled} onChange={(v) => set('stealth', v)} />
+          <Check label="Show monitoring notice" help="Employees see a one-time notice and a tray icon so they know this computer is monitored. Ignored in stealth mode."
+            checked={p.showNotice && !p.stealth} disabled={disabled || p.stealth} onChange={(v) => set('showNotice', v)} />
+          <Check label="Employees can pause" help="Lets the user pause tracking from the tray menu (e.g. for personal time). Ignored in stealth mode (no tray)."
+            checked={p.allowPause && !p.stealth} disabled={disabled || p.stealth} onChange={(v) => set('allowPause', v)} />
           <Num label="Max pause length" value={p.maxPauseMin} min={1} max={480} suffix="min"
-            disabled={disabled || !p.allowPause} onChange={(v) => set('maxPauseMin', v)} />
+            disabled={disabled || !p.allowPause || p.stealth} onChange={(v) => set('maxPauseMin', v)} />
         </div>
       </div>
 

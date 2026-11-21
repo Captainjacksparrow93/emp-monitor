@@ -108,7 +108,11 @@ Then, in the dashboard, go to **Machines → Add machine**: create a code, insta
 - On macOS, deploy `/Library/Application Support/EmpMonitorAgent/enroll.json` with your MDM.
 - Launch the agent with `--server=… --code=…`.
 
-**macOS permissions:** the agent needs *Screen Recording* (for screenshots) and *Accessibility* (for window titles and browser URLs). It prompts for both after enrollment. With an MDM, grant them silently using a PPPC profile for bundle ID `com.empmonitor.agent`. The dashboard flags Macs that are missing a permission.
+**Stealth mode (silent / hidden agent):** when enabled, the agent runs with **no tray / menu-bar icon, no monitoring notice, and no windows or dialogs** on Windows and macOS. Turn it on in **Monitoring policy → Stealth mode** (global or per machine), or force it at install time for a silent rollout by adding `"stealth": true` to `enroll.json`, or passing `--stealth` on the command line. The install-time flag is sticky (the agent stays hidden regardless of later policy), so for a guaranteed-silent fleet set it there as well as in the policy. In stealth mode you must deploy via `enroll.json` / MDM / CLI, because the manual enrollment window never appears.
+
+> **Important:** hiding the agent does not remove your legal duty to disclose. Covert monitoring is restricted or unlawful in many places even for company-owned devices (for example under GDPR in the EU/UK, and various US state laws). Make sure you have a lawful basis and a written monitoring policy or employee consent before using stealth mode.
+
+**macOS permissions:** the agent needs *Screen Recording* (for screenshots) and *Accessibility* (for window titles and browser URLs). It prompts for both after enrollment — those prompts are shown by macOS itself, so for a truly silent install you must pre-grant them with an MDM PPPC profile for bundle ID `com.empmonitor.agent` (in stealth mode nothing prompts the user to grant them). The dashboard flags Macs that are missing a permission.
 
 **Code signing:** unsigned builds work, but Windows SmartScreen and macOS Gatekeeper show warnings (on macOS: right-click → Open the first time). For production, add the signing secrets listed at the top of the workflow file.
 
@@ -140,4 +144,4 @@ cd pg-edition/agent && npm test                                                 
 
 ## Privacy & legal
 
-Employee monitoring is regulated in many countries (for example GDPR in the EU/UK, and state laws in the US). The agent is deliberately **visible**: it has a tray / menu-bar icon and shows a one-time notice that lists what is collected. It stores domains rather than full URLs, keeps window titles out of the database, supports private/excluded apps, blurred screenshots and working-hours-only monitoring, and supports retention limits. Make sure your use complies with local law and your employment agreements.
+Employee monitoring is regulated in many countries (for example GDPR in the EU/UK, and state laws in the US). By default the agent is **visible**: it has a tray / menu-bar icon and shows a one-time notice that lists what is collected. It stores domains rather than full URLs, keeps window titles out of the database, supports private/excluded apps, blurred screenshots and working-hours-only monitoring, and supports retention limits. A **stealth mode** is available that hides the agent completely; it does not change your legal obligations, and covert monitoring is restricted or unlawful in many jurisdictions. Make sure your use — visible or stealth — complies with local law and your employment agreements.

