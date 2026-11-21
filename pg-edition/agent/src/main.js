@@ -38,6 +38,7 @@ const DEFAULT_POLICY = {
   allowPause: false,
   maxPauseMin: 30,
   showNotice: true,
+  stealth: false, // when true: no tray icon, no notice, no windows or dialogs — runs silently
   excludedApps: [],
 };
 
@@ -67,6 +68,16 @@ function effectivePolicy(p) {
     return o;
   };
   return merge(DEFAULT_POLICY, p || {});
+}
+
+/**
+ * Stealth mode hides every visible trace of the agent (no tray/menu-bar icon, no notice,
+ * no windows or dialogs). It can come from the server policy, or be forced at install time
+ * for a silent deployment (enroll.json "stealth":true / the --stealth flag), which is sticky.
+ * store.get('policy') covers the window before the live policy has been fetched on startup.
+ */
+function isStealth() {
+  return !!(store.get('stealthForced') || policy.stealth || store.get('policy')?.stealth);
 }
 
 function monitoringState() {
@@ -216,8 +227,22 @@ function applyPolicy() {
   scheduleUpload();
   scheduleScreenshot();
   scheduleHeartbeat();
-  updateTray();
+  syncTray();
   maybeShowNotice();
+}
+
+/** Create, refresh or remove the tray icon to match stealth mode. */
+function syncTray() {
+  if (isStealth()) {
+    if (tray) { tray.destroy(); tray = null; }
+    if (isMac) app.dock?.hide();
+    return;
+  }
+  if (!tray) {
+    tray = new Tray(trayIcon());
+    tray.on('click', () => tray.popUpContextMenu());
+  }
+  updateTray();
 }
 
 async function handleCommand(cmd) {
@@ -292,12 +317,12 @@ async function revoke(message) {
   await clearQueue().catch(() => {});
   try { fs.rmSync(pendingFile(), { force: true }); } catch { /* ignore */ }
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: false });
-  await dialog.showMessageBox({ type: 'info', title: 'EmpMonitor Agent', message }).catch(() => {});
+  if (!isStealth()) await dialog.showMessageBox({ type: 'info', title: 'EmpMonitor Agent', message }).catch(() => {});
   app.exit(0);
 }
 
 function maybeShowNotice() {
-  if (!policy.showNotice || store.get('noticeShown')) return;
+  if (isStealth() || !policy.showNotice || store.get('noticeShown')) return;
   store.set({ noticeShown: true });
   const parts = [];
   if (policy.activity.trackApps) parts.push('applications used');
@@ -383,7 +408,7 @@ function normalizeUrl(u) {
   return s;
 }
 
-async function enroll(serverUrl, code) {
+async function enroll(serverUrl, code, { stealth = false } = {}) {
   const url = normalizeUrl(serverUrl);
   const res = await request('/enroll', {
     method: 'POST',
@@ -400,6 +425,8 @@ async function enroll(serverUrl, code) {
     },
   });
   store.set({ serverUrl: url, deviceUuid: res.deviceUuid, policy: res.policy, policyVersion: res.policyVersion, deviceId: res.deviceId });
+  // A stealth flag from the installer is sticky; the server policy's own stealth setting still applies on top.
+  if (stealth) store.set({ stealthForced: true });
   store.setToken(res.token);
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
   if (isMac) {
@@ -459,14 +486,14 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
+    if (isStealth()) return;
     if (!store.isEnrolled()) showEnrollWindow();
     else showAbout();
   });
 
   app.whenReady().then(async () => {
     if (isMac) app.dock?.hide();
-    tray = new Tray(trayIcon());
-    tray.on('click', () => tray.popUpContextMenu());
+    syncTray(); // creates the tray icon unless stealth mode is already known from a previous run
 
     powerMonitor.on('lock-screen', () => { locked = true; updateTray(); });
     powerMonitor.on('unlock-screen', () => { locked = false; lastSample = Date.now(); updateTray(); });
@@ -475,7 +502,7 @@ if (!app.requestSingleInstanceLock()) {
     powerMonitor.on('shutdown', () => savePending());
 
     setRevokedHandler(() => revoke('This computer is no longer authorised to report to the server.'));
-    setInterval(updateTray, 60 * 1000);
+    setInterval(() => { if (tray) updateTray(); }, 60 * 1000);
 
     if (store.isEnrolled()) {
       if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
@@ -484,18 +511,21 @@ if (!app.requestSingleInstanceLock()) {
       const prov = findProvisioning();
       if (prov) {
         try {
-          await enroll(prov.serverUrl, prov.code);
+          await enroll(prov.serverUrl, prov.code, { stealth: prov.stealth });
           log(`enrolled automatically from ${prov.source}`);
-          if (Notification.isSupported()) new Notification({ title: 'EmpMonitor Agent', body: `Connected to ${orgName || prov.serverUrl}` }).show();
+          if (!isStealth() && Notification.isSupported()) {
+            new Notification({ title: 'EmpMonitor Agent', body: `Connected to ${orgName || prov.serverUrl}` }).show();
+          }
         } catch (e) {
           log('auto-enroll failed:', e.message);
-          showEnrollWindow();
+          if (!isStealth()) showEnrollWindow();
         }
-      } else {
+      } else if (!isStealth()) {
+        // Not provisioned and not forced stealth: show the manual enrollment window.
         showEnrollWindow();
       }
     }
-    updateTray();
+    syncTray();
   });
 
   // Keep running in the tray when the enrollment window is closed.

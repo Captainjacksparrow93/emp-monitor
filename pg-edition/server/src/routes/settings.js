@@ -32,6 +32,7 @@ function sanitizePolicy(p) {
   out.uploadIntervalMin = clamp(out.uploadIntervalMin, 1, 120, 10);
   out.heartbeatSec = clamp(out.heartbeatSec, 30, 900, 120);
   out.maxPauseMin = clamp(out.maxPauseMin, 1, 480, 30);
+  out.stealth = !!out.stealth;
   if (!Array.isArray(out.excludedApps)) out.excludedApps = [];
   out.excludedApps = out.excludedApps.map((s) => String(s).trim()).filter(Boolean).slice(0, 200);
   if (!Array.isArray(out.schedule.days)) out.schedule.days = [1, 2, 3, 4, 5];

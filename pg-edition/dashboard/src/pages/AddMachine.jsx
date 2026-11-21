@@ -105,8 +105,8 @@ export default function AddMachine() {
           )}
           {os === 'mass' && (
             <div className="small stack" style={{ gap: 10 }}>
-              <div>Create an <b>unlimited</b> code, then pre-configure machines silently (Intune, GPO, Jamf, MDM) by placing an <code>enroll.json</code> file before first launch:</div>
-              <div className="codebox mono">{JSON.stringify({ serverUrl: server, code }, null, 2)}</div>
+              <div>Create an <b>unlimited</b> code, then pre-configure machines silently (Intune, GPO, Jamf, MDM) by placing an <code>enroll.json</code> file before first launch. Add <code>"stealth": true</code> to hide the agent entirely (no tray icon, no notice), or set it from the Monitoring policy afterwards:</div>
+              <div className="codebox mono">{JSON.stringify({ serverUrl: server, code, stealth: true }, null, 2)}</div>
               <div>Windows: <code>C:\ProgramData\EmpMonitorAgent\enroll.json</code><br />macOS: <code>/Library/Application Support/EmpMonitorAgent/enroll.json</code></div>
               <div>Silent Windows install:</div>
               <div className="codebox mono">EmpMonitor-Agent-Setup.exe /S</div>
