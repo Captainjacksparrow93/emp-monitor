@@ -73,7 +73,7 @@ let dbReady = false;
 let dbError = null;
 
 // Health check never touches the DB (so uptime monitors don't keep Neon awake).
-app.get('/healthz', (req, res) => res.json({ ok: true, dbReady, uptime: process.uptime() }));
+app.get('/healthz', (req, res) => res.json({ ok: true, dbReady, dbError: dbReady ? null : dbError, uptime: process.uptime() }));
 
 // Gate the API until the database is ready, with a clear message the dashboard can show.
 app.use('/api', (req, res, next) => {
@@ -118,6 +118,23 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
 });
 
+// Node throws an AggregateError (empty .message) when every resolved address fails, which hides the
+// real cause. Surface the code, address and sub-errors so the dashboard/health check can show them.
+function describeDbError(e) {
+  if (!e) return '';
+  const parts = [];
+  if (e.code) parts.push(e.code);
+  if (e.message) parts.push(e.message);
+  if (Array.isArray(e.errors)) {
+    for (const sub of e.errors.slice(0, 3)) {
+      const bits = [sub.code, sub.message, sub.address && `${sub.address}:${sub.port || ''}`].filter(Boolean).join(' ');
+      if (bits) parts.push(bits);
+    }
+  }
+  if (e.address) parts.push(`${e.address}:${e.port || ''}`);
+  return parts.filter(Boolean).join(' | ') || String(e);
+}
+
 async function initDb() {
   // Keep trying until the database is reachable; the HTTP server is already up and returns 503
   // in the meantime, so a bad DATABASE_URL or a Neon outage never crash-loops the container.
@@ -135,9 +152,9 @@ async function initDb() {
       return;
     } catch (e) {
       attempt += 1;
-      dbError = e.message;
+      dbError = describeDbError(e);
       const wait = Math.min(30000, 2000 * attempt);
-      console.error(`[boot] database not ready (attempt ${attempt}): ${e.message} — retrying in ${wait / 1000}s`);
+      console.error(`[boot] database not ready (attempt ${attempt}): ${dbError} — retrying in ${wait / 1000}s`);
       await new Promise((r) => setTimeout(r, wait));
     }
   }
