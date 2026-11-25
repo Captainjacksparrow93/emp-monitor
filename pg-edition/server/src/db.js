@@ -24,7 +24,8 @@ if (isNeon) {
   types.setTypeParser(20, (v) => Number(v));
   types.setTypeParser(1700, (v) => Number(v));
   types.setTypeParser(1082, (v) => v);
-  const sql = neon(config.databaseUrl, { fullResults: true }); // each call is one HTTPS request on 443
+  // Pass `types` so the parsers above apply (otherwise bigint/numeric come back as strings).
+  const sql = neon(config.databaseUrl, { fullResults: true, types }); // each call is one HTTPS request on 443
   backend = {
     kind: 'neon-http',
     query: (text, params) => sql(text, params ?? []),
