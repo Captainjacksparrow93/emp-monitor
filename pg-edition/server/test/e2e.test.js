@@ -51,7 +51,7 @@ before(async () => {
   proc.stderr.on('data', (d) => process.stderr.write(d));
   await new Promise((resolve, reject) => {
     const to = setTimeout(() => reject(new Error('server did not start')), 20000);
-    proc.stdout.on('data', (d) => { if (String(d).includes('listening')) { clearTimeout(to); resolve(); } });
+    proc.stdout.on('data', (d) => { if (String(d).includes('database ready')) { clearTimeout(to); resolve(); } });
   });
 });
 

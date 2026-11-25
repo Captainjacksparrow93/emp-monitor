@@ -66,8 +66,20 @@ app.use((req, res, next) => {
   return next();
 });
 
+// Becomes true once migrations + state have loaded. Until then (e.g. a wrong DATABASE_URL or a
+// Neon outage at boot) the API stays up and returns a clear 503 instead of the whole container
+// crash-looping, which would make the host's proxy answer every request with an opaque 404.
+let dbReady = false;
+let dbError = null;
+
 // Health check never touches the DB (so uptime monitors don't keep Neon awake).
-app.get('/healthz', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
+app.get('/healthz', (req, res) => res.json({ ok: true, dbReady, uptime: process.uptime() }));
+
+// Gate the API until the database is ready, with a clear message the dashboard can show.
+app.use('/api', (req, res, next) => {
+  if (dbReady) return next();
+  return res.status(503).json({ error: 'Server is starting / cannot reach its database. Check DATABASE_URL and the Neon project, then restart.', detail: dbError });
+});
 
 app.use('/api/agent', agentRouter);
 
@@ -106,16 +118,36 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message });
 });
 
+async function initDb() {
+  // Keep trying until the database is reachable; the HTTP server is already up and returns 503
+  // in the meantime, so a bad DATABASE_URL or a Neon outage never crash-loops the container.
+  let attempt = 0;
+  for (;;) {
+    try {
+      await migrate();
+      await loadState();
+      await seedOnce();
+      recoverSpool();
+      startFlushTimer(() => runCleanup().catch((e) => console.error('[cleanup]', e.message)));
+      dbReady = true;
+      dbError = null;
+      console.log('[boot] database ready; API fully available');
+      return;
+    } catch (e) {
+      attempt += 1;
+      dbError = e.message;
+      const wait = Math.min(30000, 2000 * attempt);
+      console.error(`[boot] database not ready (attempt ${attempt}): ${e.message} — retrying in ${wait / 1000}s`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
+
 async function main() {
-  console.log('[boot] running migrations + loading state (one DB wake-up)');
-  await migrate();
-  await loadState();
-  await seedOnce();
-  recoverSpool();
-  startFlushTimer(() => runCleanup().catch((e) => console.error('[cleanup]', e.message)));
   const server = app.listen(config.port, () => {
     console.log(`[boot] EmpMonitor PG server listening on :${config.port} (flush every ${config.flushIntervalMin} min)`);
   });
+  initDb(); // runs in the background; /healthz stays up so the proxy keeps routing to us
 
   let stopping = false;
   const shutdown = async (sig) => {
