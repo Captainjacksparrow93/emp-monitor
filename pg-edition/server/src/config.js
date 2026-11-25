@@ -26,6 +26,7 @@ export const config = {
   dataDir: path.resolve(process.env.DATA_DIR || './data'),
   flushIntervalMin: num(process.env.FLUSH_INTERVAL_MIN, 20),
   flushMaxRows: num(process.env.FLUSH_MAX_ROWS, 20000),
+  dbDriver: process.env.DB_DRIVER || '', // 'pg' forces node-postgres even for a Neon URL
   pgPoolMax: num(process.env.PG_POOL_MAX, 4),
   pgIdleTimeoutMs: num(process.env.PG_IDLE_TIMEOUT_MS, 10000),
   dbStorageLimitMb: num(process.env.DB_STORAGE_LIMIT_MB, 512),
