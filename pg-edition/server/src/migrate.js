@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { query } from './db.js';
+import { runSchema } from './db.js';
 
 export async function migrate() {
   const sql = fs.readFileSync(fileURLToPath(new URL('./schema.sql', import.meta.url)), 'utf8');
-  await query(sql);
+  await runSchema(sql);
 }
 
 // Allow `npm run migrate`
