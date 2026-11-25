@@ -1,11 +1,32 @@
-import pg from 'pg';
 import { config } from './config.js';
 
+// Some hosts (and some VPS firewalls) block outbound Postgres port 5432. Neon can also be reached
+// over HTTPS/WebSocket on port 443, which is almost always open. So for a Neon database we use the
+// @neondatabase/serverless driver (443); for any other Postgres (local dev, tests) we use node-postgres.
+const isNeon = /neon\.tech/i.test(config.databaseUrl) && config.dbDriver !== 'pg';
+
+let Pool;
+let types;
+if (isNeon) {
+  const neon = await import('@neondatabase/serverless');
+  const ws = (await import('ws')).default;
+  // Every query and transaction runs over a WebSocket to Neon on port 443 (full Postgres protocol,
+  // so multi-statement migrations and transactions work); fetch mode is off because it is single-statement.
+  neon.neonConfig.webSocketConstructor = globalThis.WebSocket || ws;
+  neon.neonConfig.poolQueryViaFetch = false;
+  ({ Pool, types } = neon);
+  console.log('[db] using Neon serverless driver over HTTPS (port 443)');
+} else {
+  const pg = (await import('pg')).default;
+  ({ Pool, types } = pg);
+  console.log('[db] using node-postgres driver (port 5432)');
+}
+
 // Return BIGINT/NUMERIC aggregates as JS numbers (all our sums fit comfortably).
-pg.types.setTypeParser(20, (v) => Number(v));
-pg.types.setTypeParser(1700, (v) => Number(v));
+types.setTypeParser(20, (v) => Number(v));
+types.setTypeParser(1700, (v) => Number(v));
 // DATE -> 'YYYY-MM-DD' string (no timezone shifting).
-pg.types.setTypeParser(1082, (v) => v);
+types.setTypeParser(1082, (v) => v);
 
 /**
  * Neon free-tier notes
@@ -16,13 +37,13 @@ pg.types.setTypeParser(1082, (v) => v);
  * - We track query counts and "wake-ups" (first query after >5 min of silence) so the System
  *   panel can show how often the compute is being woken.
  */
-const pool = new pg.Pool({
+const pool = new Pool({
   connectionString: config.databaseUrl,
   max: config.pgPoolMax,
   idleTimeoutMillis: config.pgIdleTimeoutMs,
   connectionTimeoutMillis: 15000, // a suspended Neon compute needs a moment to cold start
   allowExitOnIdle: false,
-  ssl: /sslmode=(require|verify)/.test(config.databaseUrl) || /neon\.tech/.test(config.databaseUrl)
+  ssl: !isNeon && (/sslmode=(require|verify)/.test(config.databaseUrl))
     ? { rejectUnauthorized: false }
     : undefined,
 });
