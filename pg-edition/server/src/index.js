@@ -1,6 +1,10 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import dns from 'node:dns';
+// Prefer IPv4: this container has no IPv6 route, and resolving a host's AAAA record first makes
+// Node's fetch/WebSocket fail ("fetch failed" / network error) instead of using the working IPv4.
+dns.setDefaultResultOrder('ipv4first');
 import { config, assertConfig } from './config.js';
 import { migrate } from './migrate.js';
 import { closePool, query } from './db.js';
@@ -120,17 +124,13 @@ app.use((err, req, res, next) => {
 
 // Node throws an AggregateError (empty .message) when every resolved address fails, which hides the
 // real cause. Surface the code, address and sub-errors so the dashboard/health check can show them.
-function describeDbError(e) {
-  if (!e) return '';
+function describeDbError(e, depth = 0) {
+  if (!e || depth > 4) return '';
   const parts = [];
   if (e.code) parts.push(e.code);
   if (e.message) parts.push(e.message);
-  if (Array.isArray(e.errors)) {
-    for (const sub of e.errors.slice(0, 3)) {
-      const bits = [sub.code, sub.message, sub.address && `${sub.address}:${sub.port || ''}`].filter(Boolean).join(' ');
-      if (bits) parts.push(bits);
-    }
-  }
+  if (Array.isArray(e.errors)) for (const sub of e.errors.slice(0, 3)) parts.push(describeDbError(sub, depth + 1));
+  if (e.cause) parts.push(`cause: ${describeDbError(e.cause, depth + 1)}`); // undici "fetch failed" hides the real reason here
   if (e.address) parts.push(`${e.address}:${e.port || ''}`);
   return parts.filter(Boolean).join(' | ') || String(e);
 }
