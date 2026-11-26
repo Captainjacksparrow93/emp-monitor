@@ -7,7 +7,7 @@ import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');
 import { config, assertConfig } from './config.js';
 import { migrate } from './migrate.js';
-import { closePool, query } from './db.js';
+import { closePool, query, runSchema } from './db.js';
 import { loadState, state, saveSetting } from './state.js';
 import { recoverSpool, startFlushTimer, stopFlushTimer, flush } from './buffer.js';
 import { runCleanup } from './maintenance.js';
@@ -83,6 +83,31 @@ app.get('/healthz', (req, res) => res.json({ ok: true, dbReady, dbError: dbReady
 app.use('/api', (req, res, next) => {
   if (dbReady) return next();
   return res.status(503).json({ error: 'Server is starting / cannot reach its database. Check DATABASE_URL and the Neon project, then restart.', detail: dbError });
+});
+
+// One-time data import (used once when moving the DB onto the VPS). Token-gated and refuses to run
+// once the database already has an admin, so it can never clobber a live install. The body is raw
+// SQL (data INSERTs + setval) generated from the old database; it runs as a single transaction.
+app.post('/api/restore', express.text({ type: '*/*', limit: '64mb' }), async (req, res) => {
+  if (!process.env.RESTORE_TOKEN || req.get('X-Restore-Token') !== process.env.RESTORE_TOKEN) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const chk = await query('SELECT count(*)::int AS n FROM admins');
+    if (chk.rows[0].n > 0) return res.status(409).json({ error: 'database is not empty; refusing to restore' });
+    await runSchema(String(req.body || ''));
+    await loadState();
+    const counts = await query(
+      `SELECT (SELECT count(*) FROM admins) admins, (SELECT count(*) FROM employees) employees,
+              (SELECT count(*) FROM devices) devices, (SELECT count(*) FROM productivity_rules) rules,
+              (SELECT count(*) FROM screenshots) screenshots, (SELECT count(*) FROM activity_app) activity_app,
+              (SELECT count(*) FROM activity_device) activity_device`,
+    );
+    return res.json({ ok: true, counts: counts.rows[0] });
+  } catch (e) {
+    console.error('[restore]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 app.use('/api/agent', agentRouter);
